@@ -2020,7 +2020,7 @@ if __name__ == "__main__":
     # arm_ik = H1_ArmIK(Unit_Test = True, Visualization = True)
     # arm_ik = H2_ArmIK(Unit_Test = True, Visualization = True)
     # arm_ik = R1_A5_ArmIK(Unit_Test = True, Visualization = True)
-    arm_ik = R1_A7_ArmIK(Unit_Test = True, Visualization = True)
+    arm_ik = G1_29_ArmIK(Unit_Test = True, Visualization = True)
 
     # initial positon
     L_tf_target = pin.SE3(
