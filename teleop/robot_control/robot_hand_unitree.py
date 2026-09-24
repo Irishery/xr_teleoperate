@@ -30,6 +30,13 @@ kTopicDex3RightCommand = "rt/dex3/right/cmd"
 kTopicDex3LeftState = "rt/dex3/left/state"
 kTopicDex3RightState = "rt/dex3/right/state"
 
+# Lock the Dex3-1 thumb base joint (thumb_0, hardware index 0) to stop the thumb
+# from spinning around its own axis during DexPilot retargeting. thumb_1/thumb_2
+# keep tracking, so the thumb can still close between index and middle fingers.
+# Unit: rad, valid range [-1.0472, 1.0472]. Set to None to restore retargeting.
+kDex3Thumb0LockLeft  = 0.0
+kDex3Thumb0LockRight = 0.0
+
 
 class Dex3_1_Controller:
     def __init__(self, left_hand_array_in, right_hand_array_in, dual_hand_data_lock = None, dual_hand_state_array_out = None,
@@ -194,6 +201,11 @@ class Dex3_1_Controller:
 
                     left_q_target  = self.hand_retargeting.left_retargeting.retarget(ref_left_value)[self.hand_retargeting.left_dex_retargeting_to_hardware]
                     right_q_target = self.hand_retargeting.right_retargeting.retarget(ref_right_value)[self.hand_retargeting.right_dex_retargeting_to_hardware]
+
+                    if kDex3Thumb0LockLeft is not None:
+                        left_q_target[0] = kDex3Thumb0LockLeft
+                    if kDex3Thumb0LockRight is not None:
+                        right_q_target[0] = kDex3Thumb0LockRight
 
                 # get dual hand action
                 action_data = np.concatenate((left_q_target, right_q_target))    
