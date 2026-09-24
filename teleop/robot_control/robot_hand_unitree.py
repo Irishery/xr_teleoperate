@@ -85,13 +85,18 @@ class Dex3_1_Controller:
         self.left_hand_state_array  = Array('d', Dex3_Num_Motors, lock=True)  
         self.right_hand_state_array = Array('d', Dex3_Num_Motors, lock=True)
 
+        # Wait for the first state message, not for non-zero angles:
+        # hands can legitimately report q == 0.0 after power-up.
+        self.left_state_received  = False
+        self.right_state_received = False
+
         # initialize subscribe thread
         self.subscribe_state_thread = threading.Thread(target=self._subscribe_hand_state)
         self.subscribe_state_thread.daemon = True
         self.subscribe_state_thread.start()
 
         while True:
-            if any(self.left_hand_state_array) and any(self.right_hand_state_array):
+            if self.left_state_received and self.right_state_received:
                 break
             time.sleep(0.01)
             logger_mp.warning("[Dex3_1_Controller] Waiting to subscribe dds...")
@@ -108,13 +113,16 @@ class Dex3_1_Controller:
         while True:
             left_hand_msg  = self.LeftHandState_subscriber.Read()
             right_hand_msg = self.RightHandState_subscriber.Read()
-            if left_hand_msg is not None and right_hand_msg is not None:
+            if left_hand_msg is not None:
                 # Update left hand state
                 for idx, id in enumerate(Dex3_1_Left_JointIndex):
                     self.left_hand_state_array[idx] = left_hand_msg.motor_state[id].q
+                self.left_state_received = True
+            if right_hand_msg is not None:
                 # Update right hand state
                 for idx, id in enumerate(Dex3_1_Right_JointIndex):
                     self.right_hand_state_array[idx] = right_hand_msg.motor_state[id].q
+                self.right_state_received = True
             time.sleep(0.002)
     
     class _RIS_Mode:
