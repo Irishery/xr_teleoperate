@@ -145,13 +145,17 @@ class Dex3_1_Controller:
         for idx, id in enumerate(Dex3_1_Right_JointIndex):
             self.right_msg.motor_cmd[id].q = right_q_target[idx]
 
-        self.LeftHandCmb_publisher.Write(self.left_msg)
-        self.RightHandCmb_publisher.Write(self.right_msg)
+        left_write_ok = self.LeftHandCmb_publisher.Write(self.left_msg)
+        right_write_ok = self.RightHandCmb_publisher.Write(self.right_msg)
+        return left_write_ok, right_write_ok
         # logger_mp.debug("hand ctrl publish ok.")
     
     def control_process(self, left_hand_array_in, right_hand_array_in, left_hand_state_array, right_hand_state_array,
                               dual_hand_data_lock = None, dual_hand_state_array_out = None, dual_hand_action_array_out = None, xr_motion_data_ready_in = None):
         self.running = True
+        thumb_debug = os.environ.get("DEX3_THUMB_DEBUG") == "1"
+        next_thumb_log = 0.0
+        raw_left_thumb = raw_right_thumb = None
 
         left_q_target  = np.full(Dex3_Num_Motors, 0)
         right_q_target = np.full(Dex3_Num_Motors, 0)
@@ -210,6 +214,10 @@ class Dex3_1_Controller:
                     left_q_target  = self.hand_retargeting.left_retargeting.retarget(ref_left_value)[self.hand_retargeting.left_dex_retargeting_to_hardware]
                     right_q_target = self.hand_retargeting.right_retargeting.retarget(ref_right_value)[self.hand_retargeting.right_dex_retargeting_to_hardware]
 
+                    if thumb_debug:
+                        raw_left_thumb = np.round(left_q_target[:3], 4).tolist()
+                        raw_right_thumb = np.round(right_q_target[:3], 4).tolist()
+
                     if kDex3Thumb0LockLeft is not None:
                         left_q_target[0] = kDex3Thumb0LockLeft
                     if kDex3Thumb0LockRight is not None:
@@ -222,7 +230,20 @@ class Dex3_1_Controller:
                         dual_hand_state_array_out[:] = state_data
                         dual_hand_action_array_out[:] = action_data
 
-                self.ctrl_dual_hand(left_q_target, right_q_target)
+                write_ok = self.ctrl_dual_hand(left_q_target, right_q_target)
+                if thumb_debug and time.monotonic() >= next_thumb_log:
+                    # State is the latest received snapshot, not a synchronized
+                    # response to the command just written. Compare while stationary.
+                    logger_mp.info(
+                        f"[Dex3 thumb] xr_ready={bool(xr_motion_data_ready)} "
+                        f"write_ok={write_ok} | L raw={raw_left_thumb} "
+                        f"target={np.round(left_q_target[:3], 4).tolist()} "
+                        f"state={np.round(state_data[:3], 4).tolist()} | "
+                        f"R raw={raw_right_thumb} "
+                        f"target={np.round(right_q_target[:3], 4).tolist()} "
+                        f"state={np.round(state_data[7:10], 4).tolist()}"
+                    )
+                    next_thumb_log = time.monotonic() + 1.0
                 current_time = time.time()
                 time_elapsed = current_time - start_time
                 sleep_time = max(0, (1 / self.fps) - time_elapsed)
