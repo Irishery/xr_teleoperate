@@ -1,6 +1,7 @@
 from dex_retargeting import RetargetingConfig
 from pathlib import Path
 import yaml
+import numpy as np
 from enum import Enum
 import logging_mp
 logger_mp = logging_mp.getLogger(__name__)
@@ -13,8 +14,29 @@ class HandType(Enum):
     BRAINCO_HAND = "../assets/brainco_hand/brainco.yml"
     BRAINCO_HAND_Unit_Test = "../../assets/brainco_hand/brainco.yml"
 
+def _build_with_thumb0_lock(config, joint_name, lock):
+    """Keep a locked thumb joint in the model, but outside the optimization."""
+    if lock is not None:
+        if not np.isfinite(lock):
+            raise ValueError(f"{joint_name}: lock must be finite")
+        config.target_joint_names = list(config.target_joint_names)
+        config.target_joint_names.remove(joint_name)
+
+    retargeting = config.build()
+    fixed_qpos = np.array([], dtype=np.float32)
+    if lock is not None:
+        joint_index = retargeting.joint_names.index(joint_name)
+        lower, upper = retargeting.optimizer.robot.joint_limits[joint_index]
+        if not lower <= lock <= upper:
+            raise ValueError(f"{joint_name}: lock {lock} outside [{lower}, {upper}]")
+        if retargeting.optimizer.fixed_joint_names != [joint_name]:
+            raise ValueError(f"Unexpected fixed joints for {joint_name}")
+        fixed_qpos = np.array([lock], dtype=np.float32)
+    return retargeting, fixed_qpos
+
+
 class HandRetargeting:
-    def __init__(self, hand_type: HandType):
+    def __init__(self, hand_type: HandType, dex3_thumb0_locks=(None, None)):
         if hand_type == HandType.UNITREE_DEX3:
             RetargetingConfig.set_default_urdf_dir('../assets')
         elif hand_type == HandType.UNITREE_DEX3_Unit_Test:
@@ -39,8 +61,16 @@ class HandRetargeting:
 
             left_retargeting_config = RetargetingConfig.from_dict(self.cfg['left'])
             right_retargeting_config = RetargetingConfig.from_dict(self.cfg['right'])
-            self.left_retargeting = left_retargeting_config.build()
-            self.right_retargeting = right_retargeting_config.build()
+            if hand_type in (HandType.UNITREE_DEX3, HandType.UNITREE_DEX3_Unit_Test):
+                self.left_retargeting, self.left_fixed_qpos = _build_with_thumb0_lock(
+                    left_retargeting_config, "left_hand_thumb_0_joint", dex3_thumb0_locks[0],
+                )
+                self.right_retargeting, self.right_fixed_qpos = _build_with_thumb0_lock(
+                    right_retargeting_config, "right_hand_thumb_0_joint", dex3_thumb0_locks[1],
+                )
+            else:
+                self.left_retargeting = left_retargeting_config.build()
+                self.right_retargeting = right_retargeting_config.build()
 
             self.left_retargeting_joint_names = self.left_retargeting.joint_names
             self.right_retargeting_joint_names = self.right_retargeting.joint_names

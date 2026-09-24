@@ -32,7 +32,7 @@ kTopicDex3RightState = "rt/dex3/right/state"
 
 # Lock the Dex3-1 thumb base joint (thumb_0, hardware index 0) to stop the thumb
 # from spinning around its own axis during DexPilot retargeting. thumb_1/thumb_2
-# keep tracking, so the thumb can still close between index and middle fingers.
+# keep tracking with thumb_0 fixed inside the retargeting model.
 # Unit: rad, valid range [-1.0472, 1.0472]. Set to None to restore retargeting.
 kDex3Thumb0LockLeft  = 0.0
 kDex3Thumb0LockRight = 0.0
@@ -66,9 +66,13 @@ class Dex3_1_Controller:
         self.Unit_Test = Unit_Test
         self.simulation_mode = simulation_mode
         if not self.Unit_Test:
-            self.hand_retargeting = HandRetargeting(HandType.UNITREE_DEX3)
+            self.hand_retargeting = HandRetargeting(
+                HandType.UNITREE_DEX3, dex3_thumb0_locks=(kDex3Thumb0LockLeft, kDex3Thumb0LockRight),
+            )
         else:
-            self.hand_retargeting = HandRetargeting(HandType.UNITREE_DEX3_Unit_Test)
+            self.hand_retargeting = HandRetargeting(
+                HandType.UNITREE_DEX3_Unit_Test, dex3_thumb0_locks=(kDex3Thumb0LockLeft, kDex3Thumb0LockRight),
+            )
 
         # initialize handcmd publisher and handstate subscriber
         self.LeftHandCmb_publisher = ChannelPublisher(kTopicDex3LeftCommand, HandCmd_)
@@ -211,8 +215,12 @@ class Dex3_1_Controller:
                     ref_left_value = left_hand_data[self.hand_retargeting.left_indices[1,:]] - left_hand_data[self.hand_retargeting.left_indices[0,:]]
                     ref_right_value = right_hand_data[self.hand_retargeting.right_indices[1,:]] - right_hand_data[self.hand_retargeting.right_indices[0,:]]
 
-                    left_q_target  = self.hand_retargeting.left_retargeting.retarget(ref_left_value)[self.hand_retargeting.left_dex_retargeting_to_hardware]
-                    right_q_target = self.hand_retargeting.right_retargeting.retarget(ref_right_value)[self.hand_retargeting.right_dex_retargeting_to_hardware]
+                    left_q_target  = self.hand_retargeting.left_retargeting.retarget(
+                        ref_left_value, fixed_qpos=self.hand_retargeting.left_fixed_qpos,
+                    )[self.hand_retargeting.left_dex_retargeting_to_hardware]
+                    right_q_target = self.hand_retargeting.right_retargeting.retarget(
+                        ref_right_value, fixed_qpos=self.hand_retargeting.right_fixed_qpos,
+                    )[self.hand_retargeting.right_dex_retargeting_to_hardware]
 
                     if thumb_debug:
                         raw_left_thumb = np.round(left_q_target[:3], 4).tolist()
